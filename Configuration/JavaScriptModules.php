@@ -13,7 +13,9 @@ return [
         '@hn/video/' => 'EXT:video/Resources/Public/JavaScript/',
 
         // override the drag-uploader.js from the backend module
-        '@typo3/backend/drag-uploader.js' => match(\TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance(\TYPO3\CMS\Core\Information\Typo3Version::class)->getMajorVersion()) {
+        '@typo3/backend/drag-uploader.js' => match (
+            \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance(\TYPO3\CMS\Core\Information\Typo3Version::class)->getMajorVersion()
+        ) {
             12 => 'EXT:video/Resources/Public/JavaScript/drag-uploader-12.js',
             default => 'EXT:video/Resources/Public/JavaScript/drag-uploader-13.js',
         },

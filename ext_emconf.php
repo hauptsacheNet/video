@@ -7,11 +7,11 @@ $EM_CONF[$_EXTKEY] = [
     'author_email' => 'marco@hauptsache.net',
     'author_company' => 'hauptsache.net',
     'state' => 'stable',
-    'version' => '2.0.0',
+    'version' => '2.0.1',
     'constraints' => [
         'depends' => [
-            'php' => '8.0.0-8.99.99',
-            'typo3' => '12.4.0-13.4.99',
+            'php' => '8.0.0-8.9.99',
+            'typo3' => '12.4.2-13.9.99',
         ],
         'conflicts' => [
         ],

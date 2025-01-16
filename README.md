@@ -14,19 +14,31 @@
 
 ## installation
 
-You usually just need to install and activate this extension.
-The JavaScriptModules definition is used to overwrite Typo3's drag-uploader module.
-You can verify it by checking the developer console while uploading videos (and likely by your computers fans spinning).
+Running multithreaded WebAssembly comes with certain security requirements.
+To address these, browser vendors enforce the use of [specific cross-origin protections](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer#security_requirements).
 
-If you webserver has no support for `.htaccess` files, then you need to set some headers for the javascript files of this extension (or all files).
-```
+For this extension to function correctly, the backend and JavaScript files require the following HTTP headers:
+
+```yaml
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
-These headers are automatically set using a middleware for the backend itself.
-Here is the explanation why this is required:  
-https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer#security_requirements  
-In short: It will prevent a 3rd party site from embedding resources from your backend. It is a security requirement to use some timing critical browser api's.
+
+These headers can be configured in your .htaccess file or Apache server configuration as shown below:
+
+```apacheconf
+<IfModule mod_headers.c>
+    Header set Cross-Origin-Opener-Policy "same-origin"
+    Header set Cross-Origin-Embedder-Policy "require-corp"
+</IfModule>
+```
+
+Adding these headers globally to your frontend might introduce unintended side effects. To minimize such issues, consider restricting the headers to the following URLs:
+
+- `/typo3`: Covers the entire backend; omitting some urls may cause certain iframes to stop functioning.
+- `/typo3conf/ext/video/Resources/Public`: Includes the worker script and WebAssembly files.
+
+If the required headers are not properly configured, the extension will display a warning when accessing views containing the file uploader (e.g., the file list view).
 
 ## known issues
 
