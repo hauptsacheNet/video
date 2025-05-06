@@ -28,12 +28,12 @@ export async function createMp4File (videoFile, onProgress) {
     params.push('-i', `input/input`);
 
     params.push('-vf', 'scale=w=1280:h=720:force_original_aspect_ratio=decrease:force_divisible_by=2');
-    params.push('-c:v', 'libx264'); // codec
-    params.push('-crf:v', '21', '-maxrate:v', '6M', '-bufsize:v', '12M'); // quality
-    params.push('-level:v', '3.2', '-pix_fmt:v', 'yuv420p'); // compatibility
+    params.push('-c:v', 'libx264'); // encoder/codec
+    params.push('-crf:v', '21', '-maxrate:v', '4M', '-bufsize:v', '8M'); // quality - max 0.5 mbyte/sec, 30 mbyte/min
+    params.push('-level:v', '3.2', '-profile:v', 'high', '-pix_fmt:v', 'yuv420p'); // compatibility
     // NOTE: There is no easy way to limit fps without potentially introducing stutter or messing with intent, so I don't
 
-    params.push('-c:a', 'aac'); // codec
+    params.push('-c:a', 'aac'); // encoder/codec
     params.push('-b:a', '128k'); // quality
     // NOTE: I don't mess with sample rate or even channel count and hope ffmpeg uses sensible defaults
 
@@ -89,17 +89,17 @@ export async function createHlsFiles (videoFile, onProgress, emitFile) {
     ].join(';'));
 
     params.push('-map', '[720p]');
-    params.push('-c:v:0', 'libx264'); // codec
-    params.push('-crf:v:0', '21', '-maxrate:v:0', '6M', '-bufsize:v:0', '12M'); // quality
+    params.push('-c:v:0', 'libx264'); // encoder/codec
+    params.push('-crf:v:0', '21', '-maxrate:v:0', '4M', '-bufsize:v:0', '8M'); // quality - max 0.5 mbyte/sec, 30 mbyte/min
     params.push('-level:v:0', '3.2', '-profile:v:0', 'high', '-pix_fmt:v:0', 'yuv420p'); // compatibility
 
     params.push('-map', '[360p]');
-    params.push('-c:v:1', 'libx264'); // codec
-    params.push('-crf:v:1', '20', '-maxrate:v:1', '2M', '-bufsize:v:1', '4M'); // quality
+    params.push('-c:v:1', 'libx264'); // encoder/codec
+    params.push('-crf:v:1', '20', '-maxrate:v:1', '2M', '-bufsize:v:1', '4M'); // quality - max 0.2 mbyte/sec, 12 mbyte/min
     params.push('-level:v:1', '3.0', '-profile:v:1', 'main', '-pix_fmt:v:1', 'yuv420p'); // compatibility
 
     params.push('-map', '0:a');
-    params.push('-c:a:0', 'aac'); // codec
+    params.push('-c:a:0', 'aac'); // encoder/codec
     params.push('-b:a:0', '128k'); // quality
 
     params.push('-var_stream_map', [

@@ -5,7 +5,8 @@
 
 ## what does this extension do
 
-- At the moment, this extension compresses videos during the upload process to 720p h264 mp4 file using a [web assembly version of ffmpeg](https://ffmpegwasm.netlify.app).
+- It compresses videos during the upload process to 720p h264 mp4 file using a [web assembly version of ffmpeg](https://ffmpegwasm.netlify.app).
+  This means there are no server dependencies for video compression.
   - This allows you to serve well compressed videos in a universally compatible format
   - It save storage space on your server by not uploading the original files
   - It potentially helps users upload videos that have a slow internet connection
@@ -33,12 +34,25 @@ These headers can be configured in your .htaccess file or Apache server configur
 </IfModule>
 ```
 
-Adding these headers globally to your frontend might introduce unintended side effects. To minimize such issues, consider restricting the headers to the following URLs:
-
-- `/typo3`: Covers the entire backend; omitting some urls may cause certain iframes to stop functioning.
-- `/typo3conf/ext/video/Resources/Public`: Includes the worker script and WebAssembly files.
+Adding these headers globally to your frontend might introduce unintended side effects. If you try to set it only for specific folders, make sure that all resources either have the header or don't have the header. Mixing them within a document leads to errors.
 
 If the required headers are not properly configured, the extension will display a warning when accessing views containing the file uploader (e.g., the file list view).
+
+### PHP Upload Size Configuration
+
+When working with video uploads, you should adjust your PHP configuration to accommodate larger file sizes. You can expect up to 30MB per minute of video, so set your upload limits accordingly. Add or modify the following settings in your PHP configuration (php.ini) or .htaccess file:
+
+```apacheconf
+# In php.ini
+upload_max_filesize = 300M
+post_max_size = 300M
+
+# Or in .htaccess (with mod_php only)
+<IfModule mod_php.c>
+    php_value upload_max_filesize 300M
+    php_value post_max_size 300M
+</IfModule>
+```
 
 ## known issues
 
@@ -46,11 +60,11 @@ If the required headers are not properly configured, the extension will display 
 
 ## future plans
 
-- allow for quality configuration
-  - the 720p default is a pretty good compromise between quality, compatibility and file size, but you might have different requirements
 - create posters and thumbnails for video files
   - this would allow to populate the poster property of the `<video>` tag as a placeholder before playing the video
   - it could give a better overview within the fileadmin, where videos currently have no thumbnail/preview
+- allow for quality configuration
+  - the 720p default is a pretty good compromise between quality, compatibility and file size, but you might have different requirements
 - hook into the file upload process to create HLS video fragments
   - reliably serve your videos to clients with a bad connection by offering different resolutions
   - can improve upload speeds with slow internet connections
@@ -59,8 +73,6 @@ If the required headers are not properly configured, the extension will display 
 - implement some form of optional server side video conversion
   - allows to use more complex video formats like av1 (which would take forever in wasm)
   - reduces requirements on the client computer (although increases internet bandwith requirement)
-
-Video compression is done within the browser so there is no server dependency for video compression.
 
 ## v1 vs v2
 
