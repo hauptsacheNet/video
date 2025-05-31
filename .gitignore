@@ -6,6 +6,7 @@
 /public
 /var
 /vendor
+.phpunit.cache
 
 # this is a libraray, the dependencies must not be locked
 /composer.lock

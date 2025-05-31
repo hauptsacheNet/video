@@ -120,14 +120,49 @@ export async function createMp4File (videoFile, onProgress) {
     const videoProps = await analyzeVideo(ffmpeg);
     console.log("Video analysis:", videoProps);
     
+    // Extract a smart thumbnail using FFmpeg's thumbnail filter
+    const thumbnailParams = [
+        '-i', 'input/input',
+        '-filter_threads', '1', // disable multi threading for filters (broken in wasm)
+        '-vf', 'thumbnail=100,scale=w=640:h=480:force_original_aspect_ratio=decrease:force_divisible_by=2',
+        '-vframes', '1', // extract one frame
+        '-q:v', '5', // JPEG quality (2-5 is a sensible range)
+        'thumbnail_%03d.jpg' // use pattern format
+    ];
+    
+    try {
+        await ffmpeg.exec(thumbnailParams);
+        console.log("Smart thumbnail extracted successfully");
+    } catch (error) {
+        console.warn("Failed to extract thumbnail, continuing without it:", error);
+    }
+    
     const params = [];
     
-    // Input file
+    // Input files - video and thumbnail
     params.push('-i', 'input/input');
+    
+    // Check if thumbnail was created successfully (always expect pattern-based file)
+    let hasThumbnail = false;
+    try {
+        const thumbnailData = await ffmpeg.readFile('thumbnail_001.jpg');
+        if (thumbnailData && thumbnailData.length > 0) {
+            console.log("Thumbnail created successfully, size:", thumbnailData.length, "bytes");
+            params.push('-i', 'thumbnail_001.jpg');
+            hasThumbnail = true;
+        } else {
+            console.log("Thumbnail file exists but is empty");
+        }
+    } catch (error) {
+        console.log("No thumbnail available to embed:", error.message);
+    }
         
     // reduce multi threading for filters ~ it appears to be broken in some cases
     // the encoder still runs in multiple threads
     params.push('-filter_threads', '1');
+    
+    // Map video stream
+    params.push('-map', '0:v:0');
     
     // Video stream handling
     // Only copy if we have all the information we need and it meets our requirements
@@ -140,17 +175,20 @@ export async function createMp4File (videoFile, onProgress) {
     if (isH264 && isSmallEnough && hasReasonableBitrate) {
         // Video is already good, just copy it
         console.log("Video stream meets requirements, using copy");
-        params.push('-c:v', 'copy');
+        params.push('-c:v:0', 'copy');
     } else {
         // Video needs conversion
         console.log("Video stream needs conversion");
         
         params.push('-vf', 'scale=w=1280:h=720:force_original_aspect_ratio=decrease:force_divisible_by=2');
-        params.push('-c:v', 'libx264'); // encoder/codec
-        params.push('-crf:v', '21', '-maxrate:v', '4M', '-bufsize:v', '8M'); // quality - max 0.5 mbyte/sec, 30 mbyte/min
-        params.push('-level:v', '3.2', '-profile:v', 'high', '-pix_fmt:v', 'yuv420p'); // compatibility
+        params.push('-c:v:0', 'libx264'); // encoder/codec
+        params.push('-crf:v:0', '21', '-maxrate:v:0', '4M', '-bufsize:v:0', '8M'); // quality - max 0.5 mbyte/sec, 30 mbyte/min
+        params.push('-level:v:0', '3.2', '-profile:v:0', 'high', '-pix_fmt:v:0', 'yuv420p'); // compatibility
         // NOTE: There is no easy way to limit fps without potentially introducing stutter or messing with intent, so I don't
     }
+    
+    // Map audio stream
+    params.push('-map', '0:a?');
     
     // Audio stream handling
     const isAac = videoProps.audioCodec === 'aac';
@@ -167,6 +205,14 @@ export async function createMp4File (videoFile, onProgress) {
         params.push('-c:a', 'aac'); // encoder/codec
         params.push('-b:a', '128k'); // quality
         // NOTE: I don't mess with sample rate or even channel count and hope ffmpeg uses sensible defaults
+    }
+    
+    // Add thumbnail as attached picture if available
+    if (hasThumbnail) {
+        params.push('-map', '1'); // map the thumbnail image (input 1)
+        params.push('-c:v:1', 'mjpeg'); // ensure it's mjpeg codec
+        params.push('-disposition:v:1', 'attached_pic'); // mark it as attached picture
+        console.log("Adding smart thumbnail as attached picture to MP4");
     }
     
     // Output format and options
