@@ -62,7 +62,6 @@ post_max_size = 300M
 ## known issues
 
 - Empty folders in the Filelist have an upload button that avoids the drag-uploader in TYPO3 13.
-- Videos that skip conversion (already optimized H.264 720p or smaller) may have embedded thumbnails that PHP cannot process correctly. This results in missing thumbnails in the file list. This primarily affects videos that were already processed by the extension and re-uploaded.
 
 ## testing thumbnail extraction
 
