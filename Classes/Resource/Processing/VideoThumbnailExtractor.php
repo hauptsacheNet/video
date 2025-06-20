@@ -15,6 +15,7 @@ use TYPO3\CMS\Core\Resource\Processing\TaskInterface;
 use TYPO3\CMS\Core\Type\File\ImageInfo;
 use TYPO3\CMS\Core\Utility\CommandUtility;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
+use TYPO3\CMS\Frontend\Imaging\GifBuilder;
 
 /**
  * Extracts thumbnails from video files, specifically from MP4 files with embedded poster images
@@ -78,21 +79,21 @@ class VideoThumbnailExtractor implements ProcessorInterface
     {
         $sourceFile = $task->getSourceFile();
         $configuration = $task->getConfiguration();
-        
+
         // Extract thumbnail from video
         $tempFile = $this->extractVideoThumbnail($sourceFile);
-        
+
         if ($tempFile === null) {
             return null;
         }
-        
+
         // Generate final processed file
         $targetFilePath = $this->getTemporaryFilePath($task);
         $result = $this->resizeThumbnail($tempFile, $targetFilePath, $configuration);
-        
+
         // Clean up temp file
         unlink($tempFile);
-        
+
         return $result;
     }
 
@@ -112,18 +113,18 @@ class VideoThumbnailExtractor implements ProcessorInterface
     {
         $sourcePath = $sourceFile->getForLocalProcessing(false);
         $tempPath = Environment::getVarPath() . '/transient/' . uniqid('video_thumb_') . '.jpg';
-        
+
         // Ensure transient directory exists
         $transientDir = dirname($tempPath);
         if (!is_dir($transientDir)) {
             GeneralUtility::mkdir_deep($transientDir);
         }
-        
+
         // Try to extract embedded poster image from MP4 using simple extractor
         if ($sourceFile->getMimeType() === 'video/mp4') {
             try {
                 $jpegData = Mp4SimpleExtractor::extractJpeg($sourcePath);
-                
+
                 if ($jpegData !== null) {
                     file_put_contents($tempPath, $jpegData);
                     return $tempPath;
@@ -133,7 +134,7 @@ class VideoThumbnailExtractor implements ProcessorInterface
                 error_log("MP4 JPEG extraction failed: " . $e->getMessage());
             }
         }
-        
+
         // For non-MP4 files or if extraction failed, we cannot extract thumbnails
         // without FFmpeg. This is acceptable since the main use case is MP4 files
         // with embedded poster images from our own video converter.
@@ -146,78 +147,21 @@ class VideoThumbnailExtractor implements ProcessorInterface
      */
     protected function resizeThumbnail(string $sourcePath, string $targetFilePath, array $configuration): array
     {
-        // Parse dimensions from configuration (similar to LocalPreviewHelper)
-        $width = $this->parseDimension($configuration['width'] ?? 0);
-        $height = $this->parseDimension($configuration['height'] ?? 0);
-        $maxWidth = (int)($configuration['maxWidth'] ?? 0);
-        $maxHeight = (int)($configuration['maxHeight'] ?? 0);
-        
-        // If no dimensions specified, just copy the file
-        if ($width === 0 && $height === 0 && $maxWidth === 0 && $maxHeight === 0) {
-            copy($sourcePath, $targetFilePath);
-            return ['filePath' => $targetFilePath];
-        }
-        
-        // Get image info
-        $imageInfo = GeneralUtility::makeInstance(ImageInfo::class, $sourcePath);
-        $sourceWidth = $imageInfo->getWidth();
-        $sourceHeight = $imageInfo->getHeight();
-        
-        // Validate source dimensions to prevent division by zero
-        if ($sourceWidth <= 0 || $sourceHeight <= 0) {
-            // Invalid image dimensions - just copy the original
-            copy($sourcePath, $targetFilePath);
-            return ['filePath' => $targetFilePath];
-        }
-        
-        // Calculate target dimensions
-        if ($maxWidth > 0 || $maxHeight > 0) {
-            // Calculate dimensions respecting max constraints
-            $ratio = min(
-                $maxWidth > 0 ? $maxWidth / $sourceWidth : PHP_FLOAT_MAX,
-                $maxHeight > 0 ? $maxHeight / $sourceHeight : PHP_FLOAT_MAX,
-                1.0 // Don't upscale
-            );
-            $targetWidth = (int)round($sourceWidth * $ratio);
-            $targetHeight = (int)round($sourceHeight * $ratio);
-        } else {
-            // Use explicit width/height
-            if ($width === 0) {
-                $targetWidth = (int)round($sourceWidth * ($height / $sourceHeight));
-                $targetHeight = $height;
-            } elseif ($height === 0) {
-                $targetWidth = $width;
-                $targetHeight = (int)round($sourceHeight * ($width / $sourceWidth));
-            } else {
-                $targetWidth = $width;
-                $targetHeight = $height;
-            }
-        }
-        
-        // Use GraphicalFunctions to resize
+        /** @var GraphicalFunctions $graphicalFunctions */
         $graphicalFunctions = GeneralUtility::makeInstance(GraphicalFunctions::class);
-        $result = $graphicalFunctions->resize($sourcePath, 'WEB', $targetWidth, $targetHeight, '', ['sample' => true]);
-        
-        if ($result && $result->getRealPath()) {
-            // Move the result to our target path
-            rename($result->getRealPath(), $targetFilePath);
+        $result = $graphicalFunctions->imageMagickConvert($sourcePath, 'WEB', $configuration['width'], $configuration['height'], '', $configuration);
+
+        if (isset($result[3]) && file_exists($result[3])) {
+            // If result path is different from target, move it
+            if ($result[3] !== $targetFilePath) {
+                rename($result[3], $targetFilePath);
+            }
             return ['filePath' => $targetFilePath];
         } else {
             // Fallback: just copy original
             copy($sourcePath, $targetFilePath);
             return ['filePath' => $targetFilePath];
         }
-    }
-    
-    /**
-     * Parse dimension value (handle 'c' suffix for crop mode)
-     */
-    protected function parseDimension($value): int
-    {
-        if (is_string($value) && str_ends_with($value, 'c')) {
-            return (int)rtrim($value, 'c');
-        }
-        return (int)$value;
     }
 
     /**
@@ -228,14 +172,14 @@ class VideoThumbnailExtractor implements ProcessorInterface
     {
         try {
             $jpegData = Mp4SimpleExtractor::extractJpeg($videoPath);
-            
+
             if ($jpegData !== null) {
                 return file_put_contents($outputPath, $jpegData) !== false;
             }
         } catch (\Exception $e) {
             error_log("MP4 JPEG extraction failed: " . $e->getMessage());
         }
-        
+
         return false;
     }
 
@@ -246,7 +190,7 @@ class VideoThumbnailExtractor implements ProcessorInterface
     {
         try {
             $hasJpeg = Mp4SimpleExtractor::hasEmbeddedJpeg($videoPath);
-            
+
             return [
                 'has_attached_picture' => $hasJpeg,
                 'method' => $hasJpeg ? 'simple_extractor' : 'none'
