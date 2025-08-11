@@ -149,7 +149,9 @@ class VideoThumbnailExtractor implements ProcessorInterface
     {
         /** @var GraphicalFunctions $graphicalFunctions */
         $graphicalFunctions = GeneralUtility::makeInstance(GraphicalFunctions::class);
-        $result = $graphicalFunctions->imageMagickConvert($sourcePath, 'WEB', $configuration['width'], $configuration['height'], '', $configuration);
+        $width = $configuration['width'] ?? $configuration['maxWidth'] ?? '';
+        $height = $configuration['height'] ?? $configuration['maxHeight'] ?? '';
+        $result = $graphicalFunctions->imageMagickConvert($sourcePath, 'WEB', $width, $height, '', $configuration);
 
         if (isset($result[3]) && file_exists($result[3])) {
             // If result path is different from target, move it
