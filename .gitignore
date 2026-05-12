@@ -7,9 +7,17 @@
 /var
 /vendor
 
-# this is a libraray, the dependencies must not be locked
+# this is a library, the dependencies must not be locked
 /composer.lock
 
 # node module files that we don't use
 Resources/Public/node_modules/@ffmpeg/core-mt/dist/umd
 Resources/Public/node_modules/@ffmpeg/ffmpeg/dist/umd
+
+# Build / test artifacts
+/.build
+/dist
+/Build/node_modules
+/Build/playwright-report
+/Build/test-results
+/Build/tests/playwright/.auth

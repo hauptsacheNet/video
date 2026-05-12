@@ -3,6 +3,8 @@
 [![Packagist](https://img.shields.io/packagist/dt/hn/video.svg)](https://packagist.org/packages/hn/video)
 [![Packagist](https://img.shields.io/packagist/dm/hn/video.svg)](https://packagist.org/packages/hn/video)
 
+Compatible with TYPO3 13 LTS and TYPO3 14.
+
 ## what does this extension do
 
 - It compresses videos during the upload process to 720p h264 mp4 file using a [web assembly version of ffmpeg](https://ffmpegwasm.netlify.app).
@@ -57,6 +59,27 @@ post_max_size = 300M
 ## known issues
 
 - Empty folders in the Filelist have an upload button that avoids the drag-uploader in TYPO3 13.
+
+## development
+
+End-to-end tests live under `Build/tests/playwright/` and exercise the override
+in a real TYPO3 backend (login, importmap rewiring, ffmpeg.wasm conversion).
+
+```bash
+# Docker (default): MySQL + chialab/php + Playwright containers.
+bash Build/runTests.sh
+
+# Local: host PHP + SQLite + local Playwright (auto-falls back when Docker is unavailable).
+bash Build/runTests.sh --no-docker
+
+# Build the TER zip (drops a video_<version>.zip into dist/).
+composer build:ter
+```
+
+CI runs the matrix on every push and pull request (TYPO3 13.4 and 14.3).
+Tagging a GitHub release triggers `release-ter.yml`, which sets the version
+in `ext_emconf.php`, builds the zip, attaches it to the release, and publishes
+to TER (requires a `TYPO3_API_TOKEN` repository secret).
 
 ## future plans
 

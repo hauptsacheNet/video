@@ -1,34 +1,42 @@
 {
-  "name": "hn/video",
-  "description": "TYPO3 extension that compresses videos during upload to 720p H.264 MP4 using ffmpeg.wasm for optimal compatibility, storage, and performance.",
-  "type": "typo3-cms-extension",
-  "license": "GPL-2.0-or-later",
-  "autoload": {
-    "psr-4": {
-      "Hn\\Video\\": "Classes"
+    "name": "hn/video",
+    "description": "TYPO3 extension that compresses videos during upload to 720p H.264 MP4 using ffmpeg.wasm for optimal compatibility, storage, and performance.",
+    "type": "typo3-cms-extension",
+    "license": "GPL-2.0-or-later",
+    "homepage": "https://github.com/hauptsacheNet/typo3-video",
+    "authors": [
+        {
+            "name": "Marco Pfeiffer",
+            "email": "marco@hauptsache.net"
+        }
+    ],
+    "require": {
+        "php": ">=8.2",
+        "typo3/cms-backend": "^13.4 || ^14.3",
+        "typo3/cms-core": "^13.4 || ^14.3"
+    },
+    "require-dev": {
+        "typo3/cms-frontend": "^13.4 || ^14.3",
+        "typo3/cms-install": "^13.4 || ^14.3"
+    },
+    "autoload": {
+        "psr-4": {
+            "Hn\\Video\\": "Classes"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "typo3/class-alias-loader": true,
+            "typo3/cms-composer-installers": true
+        }
+    },
+    "extra": {
+        "typo3/cms": {
+            "extension-key": "video"
+        }
+    },
+    "scripts": {
+        "build:ter": "bash Build/build-ter.sh"
     }
-  },
-  "authors": [
-    {
-      "name": "Marco Pfeiffer",
-      "email": "marco@hauptsache.net"
-    }
-  ],
-  "require": {
-    "php": "^8.0",
-    "typo3/cms-backend": "^12.4|^13.4",
-    "typo3/cms-core": "^12.4|^13.4"
-  },
-  "config": {
-    "sort-packages": true,
-    "allow-plugins": {
-      "typo3/class-alias-loader": true,
-      "typo3/cms-composer-installers": true
-    }
-  },
-  "extra": {
-    "typo3/cms": {
-      "extension-key": "video"
-    }
-  }
 }

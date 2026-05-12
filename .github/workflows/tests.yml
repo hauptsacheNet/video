@@ -1,0 +1,102 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, v2]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { typo3: '13.4', php: '8.4' }
+          - { typo3: '14.3', php: '8.4' }
+    name: E2E - TYPO3 ${{ matrix.typo3 }} / PHP ${{ matrix.php }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: sqlite3, pdo_sqlite, intl, zip
+          coverage: none
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: Build/package-lock.json
+
+      - name: Pin TYPO3 version
+        run: |
+          composer require --no-update --no-interaction --no-progress \
+            "typo3/cms-core:^${{ matrix.typo3 }}" \
+            "typo3/cms-backend:^${{ matrix.typo3 }}"
+          composer require --no-update --no-interaction --no-progress --dev \
+            "typo3/cms-frontend:^${{ matrix.typo3 }}" \
+            "typo3/cms-install:^${{ matrix.typo3 }}"
+
+      - name: Install Composer dependencies
+        run: composer update --no-interaction --prefer-dist --no-progress
+
+      - name: Install Playwright npm packages
+        working-directory: Build
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: Build
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E test suite
+        run: bash Build/runTests.sh --no-docker
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-typo3-${{ matrix.typo3 }}-php-${{ matrix.php }}
+          path: |
+            Build/playwright-report
+            Build/test-results
+          retention-days: 7
+
+  build-ter:
+    runs-on: ubuntu-latest
+    name: Build TER package (smoke test)
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: zip
+          coverage: none
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build TER zip
+        run: composer build:ter
+
+      - name: Verify zip looks sane
+        run: |
+          set -e
+          ZIP=$(ls dist/video_*.zip | head -n1)
+          test -n "$ZIP"
+          unzip -l "$ZIP" | grep -E 'ext_emconf\.php' >/dev/null
+          unzip -l "$ZIP" | grep -E 'Resources/Public/JavaScript/drag-uploader\.js' >/dev/null
+          unzip -l "$ZIP" | grep -E 'Resources/Public/node_modules/@ffmpeg/core-mt/dist/esm/ffmpeg-core\.wasm' >/dev/null

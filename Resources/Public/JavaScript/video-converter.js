@@ -1,54 +1,200 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 
 /**
+ * Initializes FFmpeg and mounts the input file
+ * @param videoFile {File} The video file to process
+ * @param onProgress {(progress: number) => void} Progress callback
+ * @returns {Promise<FFmpeg>} Initialized FFmpeg instance with mounted file
+ */
+async function initFFmpeg(videoFile, onProgress) {
+    const ffmpeg = new FFmpeg();
+    await ffmpeg.load({
+        coreURL: import.meta.resolve(`@ffmpeg/core-mt/ffmpeg-core.js`),
+        wasmURL: import.meta.resolve(`@ffmpeg/core-mt/ffmpeg-core.wasm`),
+        workerURL: import.meta.resolve(`@ffmpeg/core-mt/ffmpeg-core.worker.js`),
+    });
+    
+    // Set up progress and log handlers
+    ffmpeg.on("log", ({message}) => console.log(message));
+    ffmpeg.on("progress", ({progress}) => onProgress(progress));
+    
+    // Mount the file
+    await ffmpeg.createDir('input');
+    await ffmpeg.mount('WORKERFS', { blobs: [{ name: 'input', data: videoFile }] }, '/input');
+    
+    return ffmpeg;
+}
+
+/**
+ * Analyzes video file properties by running a quick FFmpeg command and parsing the output logs
+ * @param ffmpeg {FFmpeg} The initialized FFmpeg instance with mounted file
+ * @returns {Promise<{
+ *   videoCodec: string|null,
+ *   videoWidth: number|null,
+ *   videoHeight: number|null,
+ *   videoBitrate: number|null,
+ *   videoFps: number|null,
+ *   audioCodec: string|null,
+ *   audioBitrate: number|null
+ * }>} The video properties
+ */
+async function analyzeVideo(ffmpeg) {
+    // Create a promise that will resolve with the video properties
+    return new Promise(async (resolve) => {
+        const videoProps = {
+            videoCodec: null,
+            videoWidth: null,
+            videoHeight: null,
+            videoBitrate: null,
+            videoFps: null,
+            audioCodec: null,
+            audioBitrate: null
+        };
+        
+        // Set up log handler to capture stream information
+        const logHandler = ({ message }) => {
+            console.log("FFmpeg log:", message);
+            
+            // Parse video stream info
+            if (message.includes('Stream #') && message.includes('Video:')) {
+                // Extract codec
+                const codecMatch = message.match(/Video: ([a-z0-9]+)/i);
+                if (codecMatch) {
+                    videoProps.videoCodec = codecMatch[1].toLowerCase();
+                }
+                
+                // Extract resolution
+                const resolutionMatch = message.match(/(\d+)x(\d+)/);
+                if (resolutionMatch) {
+                    videoProps.videoWidth = parseInt(resolutionMatch[1], 10);
+                    videoProps.videoHeight = parseInt(resolutionMatch[2], 10);
+                }
+                
+                // Extract bitrate
+                const bitrateMatch = message.match(/(\d+) kb\/s/);
+                if (bitrateMatch) {
+                    videoProps.videoBitrate = parseInt(bitrateMatch[1], 10);
+                }
+                
+                // Extract framerate
+                const fpsMatch = message.match(/(\d+(?:\.\d+)?) fps/);
+                if (fpsMatch) {
+                    videoProps.videoFps = parseFloat(fpsMatch[1]);
+                }
+            }
+            
+            // Parse audio stream info
+            if (message.includes('Stream #') && message.includes('Audio:')) {
+                // Extract codec
+                const codecMatch = message.match(/Audio: ([a-z0-9]+)/i);
+                if (codecMatch) {
+                    videoProps.audioCodec = codecMatch[1].toLowerCase();
+                }
+                
+                // Extract bitrate
+                const bitrateMatch = message.match(/(\d+) kb\/s/);
+                if (bitrateMatch) {
+                    videoProps.audioBitrate = parseInt(bitrateMatch[1], 10);
+                }
+            }
+        };
+        
+        // Add temporary log handler
+        ffmpeg.on("log", logHandler);
+        
+        try {
+            // Run FFmpeg with -i input only to get file information
+            await ffmpeg.exec(['-i', 'input/input']);
+        } catch (error) {
+            // This is expected - FFmpeg exits with error when only using -i without output
+            // But we've already captured the stream information from logs
+        } finally {
+            // Remove the temporary log handler
+            ffmpeg.off("log", logHandler);
+            resolve(videoProps);
+        }
+    });
+}
+
+/**
  * @param videoFile {File} The original video file
  * @param onProgress {(progress: number) => void} A callback that gets the progress event as parameter
  * @returns {Promise<File>} The final mp4 file
  */
 export async function createMp4File (videoFile, onProgress) {
-    const ffmpeg = new FFmpeg();
-    await ffmpeg.load({
-        // coreURL: import.meta.resolve(`@ffmpeg/core/ffmpeg-core.js`),
-        // wasmURL: import.meta.resolve(`@ffmpeg/core/ffmpeg-core.wasm`),
-        coreURL: import.meta.resolve(`@ffmpeg/core-mt/ffmpeg-core.js`),
-        wasmURL: import.meta.resolve(`@ffmpeg/core-mt/ffmpeg-core.wasm`),
-        workerURL: import.meta.resolve(`@ffmpeg/core-mt/ffmpeg-core.worker.js`),
-    });
-    ffmpeg.on("log", ({message}) => console.log(message));
-    ffmpeg.on("progress", ({progress}) => onProgress(progress));
+    // Initialize FFmpeg and mount the file (only once)
+    const ffmpeg = await initFFmpeg(videoFile, onProgress);
+    
+    // Analyze the video to determine if conversion is needed
+    const videoProps = await analyzeVideo(ffmpeg);
+    console.log("Video analysis:", videoProps);
+    
     const params = [];
-
+    
+    // Input file
+    params.push('-i', 'input/input');
+        
     // reduce multi threading for filters ~ it appears to be broken in some cases
     // the encoder still runs in multiple threads
     params.push('-filter_threads', '1');
-
-    // mount the file using WORKERFS. That way, we don't need to load the file into memory
-    await ffmpeg.createDir('input');
-    await ffmpeg.mount('WORKERFS', { blobs: [{ name: 'input', data: videoFile }] }, '/input');
-    params.push('-i', `input/input`);
-
-    params.push('-vf', 'scale=w=1280:h=720:force_original_aspect_ratio=decrease:force_divisible_by=2');
-    params.push('-c:v', 'libx264'); // encoder/codec
-    params.push('-crf:v', '21', '-maxrate:v', '4M', '-bufsize:v', '8M'); // quality - max 0.5 mbyte/sec, 30 mbyte/min
-    params.push('-level:v', '3.2', '-profile:v', 'high', '-pix_fmt:v', 'yuv420p'); // compatibility
-    // NOTE: There is no easy way to limit fps without potentially introducing stutter or messing with intent, so I don't
-
-    params.push('-c:a', 'aac'); // encoder/codec
-    params.push('-b:a', '128k'); // quality
-    // NOTE: I don't mess with sample rate or even channel count and hope ffmpeg uses sensible defaults
-
+    
+    // Video stream handling
+    // Only copy if we have all the information we need and it meets our requirements
+    const isH264 = videoProps.videoCodec === 'h264';
+    const hasValidDimensions = videoProps.videoWidth !== null && videoProps.videoHeight !== null;
+    const isSmallEnough = hasValidDimensions && videoProps.videoWidth <= 1280 && videoProps.videoHeight <= 720;
+    const hasValidBitrate = videoProps.videoBitrate !== null;
+    const hasReasonableBitrate = hasValidBitrate && videoProps.videoBitrate > 0 && videoProps.videoBitrate <= 4000; // 4Mbps max
+    
+    if (isH264 && isSmallEnough && hasReasonableBitrate) {
+        // Video is already good, just copy it
+        console.log("Video stream meets requirements, using copy");
+        params.push('-c:v', 'copy');
+    } else {
+        // Video needs conversion
+        console.log("Video stream needs conversion");
+        
+        params.push('-vf', 'scale=w=1280:h=720:force_original_aspect_ratio=decrease:force_divisible_by=2');
+        params.push('-c:v', 'libx264'); // encoder/codec
+        params.push('-crf:v', '21', '-maxrate:v', '4M', '-bufsize:v', '8M'); // quality - max 0.5 mbyte/sec, 30 mbyte/min
+        params.push('-level:v', '3.2', '-profile:v', 'high', '-pix_fmt:v', 'yuv420p'); // compatibility
+        // NOTE: There is no easy way to limit fps without potentially introducing stutter or messing with intent, so I don't
+    }
+    
+    // Audio stream handling
+    const isAac = videoProps.audioCodec === 'aac';
+    const hasValidAudioBitrate = videoProps.audioBitrate !== null;
+    const hasReasonableAudioBitrate = hasValidAudioBitrate && videoProps.audioBitrate <= 128;
+    
+    if (isAac && hasReasonableAudioBitrate) {
+        // Audio is already good, just copy it
+        console.log("Audio stream meets requirements, using copy");
+        params.push('-c:a', 'copy');
+    } else {
+        // Audio needs conversion
+        console.log("Audio stream needs conversion");
+        params.push('-c:a', 'aac'); // encoder/codec
+        params.push('-b:a', '128k'); // quality
+        // NOTE: I don't mess with sample rate or even channel count and hope ffmpeg uses sensible defaults
+    }
+    
+    // Output format and options
     params.push('-f', 'mp4');
     params.push('-movflags', '+faststart'); // important: move metadata to the beginning of the video
     params.push('output.mp4');
-
+    
+    // Execute FFmpeg command
     await ffmpeg.exec(params);
+    
+    // Create result file
     const resultFileName = videoFile.name.replace(/\.[^.]+$|$/, '.mp4');
     const result = new File([await ffmpeg.readFile('output.mp4')], resultFileName, {type: 'video/mp4'});
     ffmpeg.terminate();
+    
     if (result.size < 100) {
-        throw new Error("Conversion failed for unknown reasons. See Browser Console for more details.")
+        throw new Error("Conversion failed for unknown reasons. See Browser Console for more details.");
     }
-
+    
     return result;
 }
 
@@ -63,8 +209,6 @@ export async function createHlsFiles (videoFile, onProgress, emitFile) {
     ffmpeg.on("log", ({message}) => console.log(message));
     ffmpeg.on("progress", ({progress}) => onProgress(progress));
     await ffmpeg.load({
-        // coreURL: import.meta.resolve(`@ffmpeg/core/ffmpeg-core.js`),
-        // wasmURL: import.meta.resolve(`@ffmpeg/core/ffmpeg-core.wasm`),
         coreURL: import.meta.resolve(`@ffmpeg/core-mt/ffmpeg-core.js`),
         wasmURL: import.meta.resolve(`@ffmpeg/core-mt/ffmpeg-core.wasm`),
         workerURL: import.meta.resolve(`@ffmpeg/core-mt/ffmpeg-core.worker.js`),
