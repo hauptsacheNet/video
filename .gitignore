@@ -1,11 +1,15 @@
 # macOS files
 .DS_Store
 
+# release files
+*.zip
+
 # installation files
 /config
 /public
 /var
 /vendor
+.phpunit.cache
 
 # this is a library, the dependencies must not be locked
 /composer.lock

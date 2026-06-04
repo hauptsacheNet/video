@@ -3,6 +3,11 @@
 .github export-ignore
 Build export-ignore
 Tests export-ignore
+phpunit.xml export-ignore
+phpunit.xml.dist export-ignore
+.phpunit.result.cache export-ignore
+build-ter-release.sh export-ignore
+recording.clip.gif export-ignore
 
 package.json export-ignore
 package-lock.json export-ignore

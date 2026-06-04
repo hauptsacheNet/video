@@ -1,0 +1,19 @@
+services:
+  _defaults:
+    autowire: true
+    autoconfigure: true
+    public: false
+
+  Hn\Video\:
+    resource: '../Classes/*'
+
+  # Command registration
+  Hn\Video\Command\VideoThumbnailTestCommand:
+    tags:
+      - name: 'console.command'
+        command: 'video:test-thumbnail'
+        
+  Hn\Video\Command\TestFileListThumbnailCommand:
+    tags:
+      - name: 'console.command'
+        command: 'video:test-filelist'
