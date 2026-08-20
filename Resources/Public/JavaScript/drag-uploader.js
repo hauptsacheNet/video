@@ -4,6 +4,9 @@ import {createHlsFiles, createMp4File} from "./video-converter.js";
 // export the original module
 // this also loads and initializes it
 export * from "@hn/video/typo3/backend/drag-uploader.js";
+// `export *` deliberately omits the default export per ES module semantics,
+// so re-export it explicitly for consumers doing `import DragUploader from ...`.
+export {default} from "@hn/video/typo3/backend/drag-uploader.js";
 
 const ORIGINAL_VIDEO_FILE = Symbol("hn/video extension: original video file");
 
