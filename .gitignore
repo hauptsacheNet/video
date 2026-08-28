@@ -25,3 +25,5 @@ Resources/Public/node_modules/@ffmpeg/ffmpeg/dist/umd
 /Build/playwright-report
 /Build/test-results
 /Build/tests/playwright/.auth
+
+.idea
